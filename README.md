@@ -32,7 +32,7 @@ We created our first notebook and read the full-load data in Raw and saved it in
 
 Something similar to this script:
 
-```
+```python
 df_full = (spark.read
                 .format("parquet")
                 .load(f"/Volumes/raw/upsell/full_load/{tablename}/"))
@@ -48,7 +48,7 @@ On the same day, we ingested all the data in CDC with Upsert in Delta.
 
 In other words, we identify the last valid version of the data based on the primary key and the modified date field that comes from the CDC.
 
-```
+```python
 (spark.read
       .format("parquet")
       .load(f"/Volumes/raw/upsell/cdc/{tablename}/")

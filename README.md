@@ -43,3 +43,33 @@ df_full = (spark.read
         .mode("overwrite")
         .saveAsTable(f"{catalog}.{schema}.{tablename}"))
 ```
+
+On the same day, we ingested all the data in CDC with Upsert in Delta.
+
+In other words, we identify the last valid version of the data based on the primary key and the modified date field that comes from the CDC.
+
+```
+(spark.read
+      .format("parquet")
+      .load(f"/Volumes/raw/upsell/cdc/{tablename}/")
+      .createOrReplaceTempView(f"view_{tablename}"))
+
+query = f'''
+    SELECT *
+    FROM "view_{tablename}"
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY {primary_key} ORDER BY modified_date DESC) = 1
+'''
+
+df_cdc_unique = spark.sql(query)
+
+bronze = delta.DeltaTable.forName(spark, f"{catalog}.{schema}.{tablename}")
+
+(bronze.alias("b")
+       .merge(df_cdc_unique.alias("d"), f"b.{primary_key} = d.{primary_key}") 
+       .whenMatchedDelete(condition = "d.OP = 'D'")
+       .whenMatchedUpdateAll(condition = "d.OP = 'U'")
+       .whenNotMatchedInsertAll(condition = "d.OP = 'I' OR d.OP = 'U'")
+       .execute())
+```
+
+Although this code is functional, it's not very nice. Because with each new CDC load, all the files are read and processed. The following is an interesting solution to this issue, using Spark Streaming (CloudFiles).
